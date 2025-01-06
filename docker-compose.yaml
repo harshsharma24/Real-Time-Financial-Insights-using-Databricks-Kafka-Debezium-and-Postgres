@@ -1,0 +1,68 @@
+version: '3.7'
+services:
+  postgres:
+    image: 'debezium/postgres:15'
+    ports:
+      - '5432:5432'
+    environment:
+      POSTGRES_USER: docker
+      POSTGRES_PASSWORD: docker
+      POSTGRES_DB: exampledb
+
+  zookeeper:
+    image: 'confluentinc/cp-zookeeper:7.5.1'
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+    ports:
+      - '2181:2181'
+
+  kafka:
+    image: 'confluentinc/cp-enterprise-kafka:7.5.1'
+    depends_on:
+      - zookeeper
+    environment:
+      KAFKA_ZOOKEEPER_CONNECT: 'zookeeper:2181'
+      KAFKA_ADVERTISED_LISTENERS: 'PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092,EXTERNAL://0.tcp.ngrok.io:11281'
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: 'PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT,EXTERNAL:PLAINTEXT'
+      KAFKA_BROKER_ID: 1
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_JMX_PORT: 9991
+      KAFKA_LISTENERS: 'PLAINTEXT://0.0.0.0:9092,PLAINTEXT_HOST://0.0.0.0:29092,EXTERNAL://0.0.0.0:11281'
+    ports:
+      - '9092:9092'
+      - '29092:29092'
+      - '11281:11281'
+
+  debezium:
+    image: 'debezium/connect:2.4'
+    depends_on:
+      - kafka
+    environment:
+      BOOTSTRAP_SERVERS: 'kafka:9092'
+      GROUP_ID: 1
+      CONFIG_STORAGE_TOPIC: connect_configs
+      OFFSET_STORAGE_TOPIC: connect_offsets
+      CONNECT_KEY_CONVERTER_SCHEMA_REGISTRY_URL: 'http://schema-registry:8081'
+      CONNECT_VALUE_CONVERTER_SCHEMA_REGISTRY_URL: 'http://schema-registry:8081'
+    ports:
+      - '8083:8083'
+
+  schema-registry:
+    image: 'confluentinc/cp-schema-registry:7.5.1'
+    depends_on:
+      - zookeeper
+      - kafka
+    environment:
+      SCHEMA_REGISTRY_KAFKASTORE_CONNECTION_URL: 'zookeeper:2181'
+      SCHEMA_REGISTRY_HOST_NAME: 'schema-registry'
+      SCHEMA_REGISTRY_LISTENERS: 'http://schema-registry:8081,http://localhost:8081'
+      SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: 'kafka:9092'
+      SCHEMA_REGISTRY_KAFKASTORE_SECURITY_PROTOCOL: PLAINTEXT
+    ports:
+      - '8081:8081'
+
+networks:
+  default:
+    name: postgres_debezium_cdc_default_1
+    external: false
